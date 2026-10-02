@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SrNotification.Data/SrNotification.Data.csproj" />
+    <Project Path="src/SrNotification.RssReader/SrNotification.RssReader.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SrNotification.RssReader.Tests/SrNotification.RssReader.Tests.csproj" />
+  </Folder>
+</Solution>

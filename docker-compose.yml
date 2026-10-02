@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: sr_notification
+      POSTGRES_USER: sr_notification
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - create a .env file next to docker-compose.yml (see .env.example)}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sr_notification -d sr_notification"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rss-reader:
+    build:
+      context: .
+      dockerfile: src/SrNotification.RssReader/Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__SrNotification: "Host=postgres;Port=5432;Database=sr_notification;Username=sr_notification"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - create a .env file next to docker-compose.yml (see .env.example)}"
+      Database__ApplyMigrationsOnStartup: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example Atom Feed</title>
+  <link href="https://example.org/" rel="alternate" />
+  <link href="https://example.org/feed.atom" rel="self" />
+  <id>urn:uuid:60a76c80-d399-11d9-b93C-0003939e0af6</id>
+  <updated>2026-10-02T09:00:00Z</updated>
+  <entry>
+    <title>Atom entry</title>
+    <link href="https://example.org/2026/10/02/atom-entry" />
+    <id>urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a</id>
+    <updated>2026-10-02T09:00:00Z</updated>
+    <summary>Some text.</summary>
+    <author><name>John Doe</name></author>
+  </entry>
+</feed>
