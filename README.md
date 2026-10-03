@@ -46,6 +46,72 @@ docs/slack-examples/              Example Slack messages (see Part 3)
 docker-compose.yml                PostgreSQL + RSS reader + API/web app + notification sender
 ```
 
+## Getting started
+You need the .NET 10 SDK and Docker. Node.js 22+ is only needed to run the web app outside Docker.
+
+### 1. Create the `.env` file (required)
+Passwords and other secrets are not stored in `appsettings.json` or `docker-compose.yml`. They are
+read from a `.env` file in the repository root, which is git-ignored. Create it from the template:
+```bash
+cp .env.example .env        # Windows: copy .env.example .env
+```
+and set your own database password in it:
+```
+POSTGRES_PASSWORD=choose-a-strong-password
+```
+The sign-in settings (`OIDC_*`) are filled in during step 2; `.env.example` describes every value.
+
+Where the values are used:
+- `docker compose` reads `.env` automatically and passes the values to the containers. Without
+  `POSTGRES_PASSWORD`, `docker compose up` stops with an error saying it is missing.
+- The API, the RSS reader, the notification sender and the `dotnet ef` tools load `.env` themselves
+  when run locally (from the IDE or `dotnet run`).
+- On servers / CI, set them as normal environment variables instead; existing environment variables
+  take precedence over `.env`.
+
+PostgreSQL applies `POSTGRES_PASSWORD` only when it creates its data volume. If you change the
+password later, recreate the volume (this deletes the data): `docker compose down -v`.
+
+### 2. Set up sign-in
+Follow [Setting up Entra External ID](#setting-up-entra-external-id-one-time) and put the values in `.env`.
+
+### 3. Run
+Everything in Docker (web app at http://localhost:8080):
+```bash
+docker compose up --build
+```
+This starts PostgreSQL, the RSS reader, the API with the web app, and the notification sender.
+
+Or PostgreSQL in Docker and the rest locally, with hot reload for the web app:
+```bash
+docker compose up -d postgres
+dotnet run --project src/SrNotification.Api                  # http://localhost:5080
+dotnet run --project src/SrNotification.RssReader
+dotnet run --project src/SrNotification.NotificationSender
+cd src/web && npm install && npm run dev                       # open http://localhost:5173
+```
+Vite forwards `/api`, `/auth` and the sign-in callbacks to the API, so the browser sees one origin.
+It expects the API on `http://localhost:5080` (`dotnet run`). If the API runs in Docker instead
+(port 8080), set `API_URL=http://localhost:8080` in `src/web/.env.local` (git-ignored) or as an
+environment variable before `npm run dev`.
+
+Database migrations are applied automatically at startup (`Database:ApplyMigrationsOnStartup`, on
+in Development and in docker compose). In Development the RSS reader also adds a few public feeds
+(see its `appsettings.Development.json`).
+
+### 4. First steps in the app
+1. Sign up on the sign-in page and make that account an admin (see the note in
+   [Setting up Entra External ID](#setting-up-entra-external-id-one-time), step 6).
+2. Open **Admin → Email server** and set up SMTP. Until then no emails are sent, and users can't
+   switch to a different notification address (the confirmation email can't be sent).
+3. To see a notification end to end: follow a frequently updated feed with email and/or Slack
+   switched on, and wait for its next new item (the feed's existing items are not sent).
+
+### Tests
+```bash
+dotnet test
+```
+
 ## Part 1: RSS reader
 A .NET Worker Service (`BackgroundService`) that:
 1. Every `PollInterval` (default 1 min) loads the active feeds from the `RssFeeds` table.
@@ -76,54 +142,6 @@ sender can skip a newly added feed's backlog instead of flooding users.
 `ConnectionStrings:SrNotification` points at PostgreSQL. It deliberately has no password: the
 password is added at startup from `POSTGRES_PASSWORD` (see below). `Database:ApplyMigrationsOnStartup`
 applies EF Core migrations at startup (on in Development and in docker-compose).
-
-### Database password (`.env` file) — required
-The PostgreSQL password is not stored in `appsettings.json` or `docker-compose.yml`. It is read
-from a `.env` file in the repository root, which is git-ignored. Create it before the first run:
-```bash
-cp .env.example .env        # Windows: copy .env.example .env
-```
-and set your own password in it:
-```
-POSTGRES_PASSWORD=choose-a-strong-password
-```
-Where the value is used:
-- `docker compose` reads `.env` automatically and passes the password to the PostgreSQL and
-  RSS reader containers. Without it, `docker compose up` stops with an error saying it is missing.
-- The RSS reader and the `dotnet ef` tools load `.env` themselves when run locally (from the IDE
-  or `dotnet run`), and add the password to the connection string.
-- On servers / CI, set `POSTGRES_PASSWORD` as a normal environment variable instead; existing
-  environment variables take precedence over `.env`.
-
-PostgreSQL applies `POSTGRES_PASSWORD` only when it creates its data volume. If you change the
-password later, or ran the database before this file existed, recreate the volume (this deletes
-the data): `docker compose down -v`.
-
-### Running it
-One-time: create the `.env` file (see above), then the initial migration (needs the .NET 10 SDK):
-```bash
-dotnet tool restore
-dotnet ef migrations add InitialCreate -p src/SrNotification.Data -s src/SrNotification.Data -o Migrations
-```
-The `dotnet ef` commands use the local docker-compose database by default; set the
-`ConnectionStrings__SrNotification` environment variable to point them at another one.
-
-Everything in Docker:
-```bash
-docker compose up --build
-```
-
-Or PostgreSQL in Docker and the reader from your IDE / CLI:
-```bash
-docker compose up -d postgres
-dotnet run --project src/SrNotification.RssReader
-```
-In Development the reader seeds a few public feeds (see `appsettings.Development.json`).
-
-Tests:
-```bash
-dotnet test
-```
 
 ## Part 2: Web app and API
 Users sign up and sign in with **Microsoft Entra External ID**; the app stores no passwords.
@@ -239,32 +257,6 @@ Steps 2–6 happen in the new external tenant.
 
    Any other OpenID Connect provider works too (e.g. Keycloak): set its authority, client id and secret.
 
-### Database migration for part 2
-Part 2 adds tables (`Users`, `Subscriptions`, `ChannelSettings`, `SmtpSettings`, `FeedFetchErrors`,
-`NotificationDeliveries`, `DataProtectionKeys`). Create the migration once:
-```bash
-dotnet ef migrations add Part2UsersAndSettings -p src/SrNotification.Data -s src/SrNotification.Data -o Migrations
-```
-
-### Running part 2
-Everything in Docker (web app at http://localhost:8080):
-```bash
-docker compose up --build
-```
-
-Local development with hot reload:
-```bash
-docker compose up -d postgres
-dotnet run --project src/SrNotification.Api          # http://localhost:5080
-dotnet run --project src/SrNotification.RssReader
-cd src/web && npm install && npm run dev               # open http://localhost:5173
-```
-Vite forwards `/api`, `/auth` and the sign-in callbacks to the API, so the browser sees one origin.
-Commit `src/web/package-lock.json` after the first `npm install` so Docker builds are reproducible.
-
-After signing in as an admin, open **Admin → Email server** and set up SMTP. Until then, users can't
-switch to a different notification address (the confirmation email can't be sent).
-
 ## Part 3: Notification sender
 A .NET Worker Service that turns new feed items into email and Slack messages. Every `PollInterval`
 (default 30 s) it runs one cycle:
@@ -328,16 +320,3 @@ are reduced to plain text.
 
 The sender uses the same Data Protection keys (stored in the database) as the API, to decrypt the
 SMTP password and Slack webhooks.
-
-### Database migration for part 3
-```bash
-dotnet ef migrations add NotificationSender -p src/SrNotification.Data -s src/SrNotification.Data -o Migrations
-```
-
-### Running part 3
-`docker compose up --build` now also starts the `notification-sender` service. Locally:
-```bash
-dotnet run --project src/SrNotification.NotificationSender
-```
-To try it end to end: set up SMTP in **Admin → Email server**, follow a frequently updated feed with
-email and/or Slack switched on, and wait for its next new item (the feed's existing items are not sent).

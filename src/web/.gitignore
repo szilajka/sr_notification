@@ -1,2 +1,4 @@
 node_modules/
 dist/
+# Personal settings, e.g. API_URL
+.env.local
