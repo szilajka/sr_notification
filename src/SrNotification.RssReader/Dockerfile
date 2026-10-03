@@ -4,10 +4,13 @@ WORKDIR /src
 
 COPY Directory.Build.props Directory.Packages.props ./
 COPY src/SrNotification.Data/SrNotification.Data.csproj src/SrNotification.Data/
+COPY src/SrNotification.Infrastructure/SrNotification.Infrastructure.csproj src/SrNotification.Infrastructure/
 COPY src/SrNotification.RssReader/SrNotification.RssReader.csproj src/SrNotification.RssReader/
 RUN dotnet restore src/SrNotification.RssReader/SrNotification.RssReader.csproj
 
-COPY src/ src/
+COPY src/SrNotification.Data/ src/SrNotification.Data/
+COPY src/SrNotification.Infrastructure/ src/SrNotification.Infrastructure/
+COPY src/SrNotification.RssReader/ src/SrNotification.RssReader/
 RUN dotnet publish src/SrNotification.RssReader/SrNotification.RssReader.csproj \
     -c Release -o /app --no-restore
 

@@ -1,4 +1,4 @@
-namespace SrNotification.RssReader.Feeds;
+namespace SrNotification.Infrastructure.Feeds;
 
 public sealed record ParsedFeed(string? Title, string? SiteUrl, IReadOnlyList<ParsedItem> Items);
 

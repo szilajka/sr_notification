@@ -1,4 +1,4 @@
-using SrNotification.RssReader.Feeds;
+using SrNotification.Infrastructure.Feeds;
 
 namespace SrNotification.RssReader.Tests;
 

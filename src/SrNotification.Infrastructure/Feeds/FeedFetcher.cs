@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 
-namespace SrNotification.RssReader.Feeds;
+namespace SrNotification.Infrastructure.Feeds;
 
 public sealed record FetchResult(bool NotModified, ParsedFeed? Feed, string? ETag, DateTimeOffset? LastModified)
 {

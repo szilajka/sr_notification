@@ -29,5 +29,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  api:
+    build:
+      context: .
+      dockerfile: src/SrNotification.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__SrNotification: "Host=postgres;Port=5432;Database=sr_notification;Username=sr_notification"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - create a .env file next to docker-compose.yml (see .env.example)}"
+      Database__ApplyMigrationsOnStartup: "true"
+      # Sign-in (Entra External ID) - see README "Part 2"
+      OIDC_AUTHORITY: "${OIDC_AUTHORITY:-}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
+      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8080}"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:

@@ -19,6 +19,15 @@ public sealed class RssReaderOptions
     /// <summary>Feeds larger than this are rejected.</summary>
     public long MaxFeedSizeBytes { get; set; } = 10 * 1024 * 1024;
 
+    /// <summary>
+    /// Allow feeds on private/loopback addresses. Off by default because users choose the URLs the server
+    /// fetches; turn on only for local development (e.g. a test feed served from your machine).
+    /// </summary>
+    public bool AllowPrivateNetworkFeeds { get; set; }
+
+    /// <summary>How long rows of the feed error log (shown to admins) are kept.</summary>
+    public TimeSpan ErrorLogRetention { get; set; } = TimeSpan.FromDays(30);
+
     public string UserAgent { get; set; } = "SrNotification-RssReader/1.0";
 
     /// <summary>

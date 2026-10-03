@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SrNotification.Data;
 using SrNotification.Data.Entities;
+using SrNotification.Infrastructure.Feeds;
 
 namespace SrNotification.RssReader.Feeds;
 
@@ -181,18 +182,33 @@ public sealed class FeedRefresher(
         try
         {
             await using var db = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-            await db.Feeds
+            var updated = await db.Feeds
                 .Where(f => f.Id == feedId)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(f => f.LastCheckedAt, checkedAt)
                     .SetProperty(f => f.LastError, error)
                     .SetProperty(f => f.ConsecutiveFailures, f => f.ConsecutiveFailures + 1),
                     cancellationToken);
+
+            if (updated > 0) // the feed may have been deleted meanwhile
+            {
+                // History for the admin error log (LastError above only keeps the latest one).
+                db.FeedFetchErrors.Add(new FeedFetchError { FeedId = feedId, OccurredAt = checkedAt, Message = error! });
+                await db.SaveChangesAsync(cancellationToken);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Could not record the failure of feed {FeedId}", feedId);
         }
+    }
+
+    /// <summary>Deletes feed error log rows older than <see cref="RssReaderOptions.ErrorLogRetention"/>.</summary>
+    public async Task<int> PurgeOldErrorsAsync(CancellationToken cancellationToken)
+    {
+        var cutoff = timeProvider.GetUtcNow() - _options.ErrorLogRetention;
+        await using var db = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.FeedFetchErrors.Where(e => e.OccurredAt < cutoff).ExecuteDeleteAsync(cancellationToken);
     }
 
     private static string? Truncate(string? value, int maxLength) =>

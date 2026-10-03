@@ -34,11 +34,14 @@ Another background job will send the notifications to the users, using Polly.
 ```
 SrNotification.slnx
 src/
-  SrNotification.Data/        EF Core DbContext, entities and migrations (shared by all parts)
-  SrNotification.RssReader/   Part 1: background worker that reads the RSS feeds
+  SrNotification.Data/            EF Core DbContext, entities and migrations (shared by all parts)
+  SrNotification.Infrastructure/  Shared code: feed download/parsing, SSRF guard, email (SMTP), Slack
+  SrNotification.RssReader/       Part 1: background worker that reads the RSS feeds
+  SrNotification.Api/             Part 2: Web API; also serves the built React app
+  web/                            Part 2: React frontend (Vite + TypeScript)
 tests/
   SrNotification.RssReader.Tests/
-docker-compose.yml            PostgreSQL + the RSS reader
+docker-compose.yml                PostgreSQL + the RSS reader + the API/web app
 ```
 
 ## Part 1: RSS reader
@@ -119,3 +122,143 @@ Tests:
 ```bash
 dotnet test
 ```
+
+## Part 2: Web app and API
+Users sign up and sign in with **Microsoft Entra External ID**; the app stores no passwords.
+They follow RSS feeds and choose, per feed, whether new items come by **email**, **Slack**, or both.
+Admins switch channels on/off for everyone, set up the SMTP server, and read the error logs.
+
+### How it fits together
+```
+Browser (React)  --same origin, HttpOnly cookie-->  SrNotification.Api  --OpenID Connect-->  Entra External ID
+                                                         |
+                                                     PostgreSQL  <--  RSS reader (part 1), notification sender (part 3)
+```
+- **Sign-in ("backend for frontend")**: the API runs the OpenID Connect flow and keeps the session in
+  an HttpOnly cookie. The React app never handles tokens. State-changing API calls must send the
+  `X-SRN-CSRF` header (cross-site request forgery protection).
+- **Users** are created on first sign-in (`Users` table, keyed by Entra's `oid`).
+- **Feeds are shared**: users who follow the same URL share one `RssFeeds` row; each user has their own
+  `Subscriptions` row with its own email/Slack switches. Changing a feed's URL moves only that user's
+  subscription. A feed nobody follows any more is set inactive, so the reader stops polling it.
+  `Subscriptions.FollowingSince` tells the sender (part 3) not to send items older than the subscription.
+- **Notification email** defaults to the sign-in address. A different address only takes effect after
+  the user opens the confirmation link mailed to it, so nobody can send notifications to someone
+  else's inbox.
+- **Slack** uses each user's own incoming-webhook URL. Webhook URLs and the SMTP password are encrypted
+  with ASP.NET Core Data Protection; its keys are stored in the database (`DataProtectionKeys`).
+- **SSRF protection**: users choose which URLs the server fetches, so outgoing requests (feeds, Slack)
+  refuse to connect to private, loopback, link-local and other reserved addresses. For a local test
+  feed, set `App:AllowPrivateNetworkFeeds` (API) and `RssReader:AllowPrivateNetworkFeeds` (reader).
+- **Rate limits** on confirmation emails, Slack tests and feed checks.
+- **Admin error logs**: reader failures go to `FeedFetchErrors` (kept 30 days); failed notifications
+  are the `Failed` rows of `NotificationDeliveries`, written by the notification sender (part 3).
+
+### API
+| Endpoint | Who | Purpose |
+|---|---|---|
+| `GET /auth/login?returnUrl=`, `POST /auth/logout` | anyone | Sign in / sign up, sign out |
+| `GET /api/me` | user | Profile, admin flag |
+| `GET /api/me/notifications` | user | Email address, Slack webhook status, app-wide channel state |
+| `PUT /api/me/notifications/email` | user | Change the notification address (sends a confirmation link) |
+| `POST /api/email-confirmations` | anyone with the token | Confirm the new address |
+| `PUT /api/me/notifications/slack`, `POST /api/me/notifications/slack/test` | user | Set/remove the webhook, send a test |
+| `GET/POST /api/subscriptions`, `PUT/DELETE /api/subscriptions/{id}` | user | Followed feeds and their switches |
+| `GET /api/admin/channels`, `PUT /api/admin/channels/{Email\|Slack}` | admin | App-wide channel switches |
+| `GET/PUT /api/admin/smtp`, `POST /api/admin/smtp/test` | admin | SMTP server, test email |
+| `GET /api/admin/feeds?status=all\|failing\|inactive` | admin | Feed health |
+| `GET /api/admin/logs/feeds`, `GET /api/admin/logs/notifications` | admin | Error logs |
+
+In Development the OpenAPI document is at `/openapi/v1.json` and an API explorer at `/scalar`.
+
+### Setting up Entra External ID (one time)
+Some settings belong to the **app registration** (open it under **Entra ID → App registrations →
+(your app)**); others are **tenant-wide** and live outside the app registration. Each step says which.
+Steps 2–6 happen in the new external tenant.
+
+1. Create an **external tenant**: in the [Microsoft Entra admin center](https://entra.microsoft.com),
+   go to **Entra ID → Overview → Manage tenants → Create**, choose **External**, then **Continue**.
+   You need an Azure subscription and at least the **Tenant Creator** role on it, or pick the
+   30-day free trial (no subscription needed the first time). Creation can take up to 30 minutes.
+   Then switch to the new tenant (Settings → Directories + subscriptions) for the steps below.
+   Full guide: [Create an external tenant](https://learn.microsoft.com/en-us/entra/external-id/customers/how-to-create-external-tenant-portal).
+2. **Register the app** (tenant-wide menu): **Entra ID → App registrations → New registration**
+   (single tenant). Then, *inside the app registration*: **Authentication → Add a platform → Web**,
+   and add the redirect URIs
+   - `http://localhost:5173/signin-oidc` (local development through Vite)
+   - `http://localhost:8080/signin-oidc` (docker compose)
+   - `https://<your domain>/signin-oidc` (production)
+
+   and, for each of those hosts, also `.../signout-callback-oidc` (where users land after signing out).
+3. **Client secret** (*inside the app registration*): **Certificates & secrets → New client secret**.
+   Copy the value right away; it's shown only once.
+4. **Email claim** (*inside the app registration*): **Token configuration → Add optional claim → ID → `email`**.
+5. **Sign-up and sign-in flow** (*tenant-wide, not in the app registration*): open **User flows**
+   from the external tenant's **Overview** page, or under **External Identities → User flows**.
+   Select **New user flow** (sign up and sign in, with email + password or email one-time passcode).
+   Then open the new flow, go to **Applications → Add application**, and select your app.
+6. **Admin role**:
+   - *inside the app registration*: **App roles → Create app role** with value `Admin`
+     (allowed member types: Users);
+   - *tenant-wide*: **Entra ID → Enterprise applications → (your app) → Users and groups →
+     Add user/group**, and assign the `Admin` role to each admin.
+
+   To bootstrap the first admin quickly, put their sign-in email in `ADMIN_EMAIL` instead.
+
+   > **Your tenant admin account can't sign in to the app.** The account you created the tenant with
+   > manages the tenant but isn't a customer account, and the app's sign-in page only finds customer
+   > accounts (created through the user flow from step 5). So, to use the app yourself, select
+   > **Sign up** on the sign-in page, even with the same email address. That creates a separate
+   > customer account. Give *that* account the `Admin` role (assign it as above, or put its email in
+   > `ADMIN_EMAIL`), and keep the tenant admin account for managing the tenant in the portal.
+   > The app tells users apart by Entra's user ID, not by email, so the two accounts are never merged.
+7. Fill in `.env` (see `.env.example`):
+   ```
+   OIDC_AUTHORITY=https://<tenant-subdomain>.ciamlogin.com/<tenant-id>/v2.0
+   OIDC_CLIENT_ID=<application (client) id>
+   OIDC_CLIENT_SECRET=<client secret>
+   ADMIN_EMAIL=you@example.com
+   ```
+   Where to find the values:
+   - **`OIDC_AUTHORITY`**: there is no ready-made value in the portal; build it from two values on
+     the external tenant's **Overview** page:
+     - **Tenant ID** (a GUID) → `<tenant-id>`
+     - **Primary domain**, e.g. `srnotification.onmicrosoft.com` → the part before
+       `.onmicrosoft.com` is `<tenant-subdomain>` (the domain name you chose when creating the tenant)
+
+     Example: `https://srnotification.ciamlogin.com/aaaabbbb-1111-2222-3333-ccccddddeeee/v2.0`.
+     To check it, open `<authority>/.well-known/openid-configuration` in a browser: you should get a
+     JSON document. The app reads that same document when users sign in.
+     Use this full form. The short `https://<tenant-subdomain>.ciamlogin.com/` seen in some Microsoft
+     samples is for the MSAL / Microsoft.Identity.Web libraries, not for ASP.NET Core's OpenID Connect
+     handler that this app uses.
+   - **`OIDC_CLIENT_ID`**: the app registration's **Overview** page → **Application (client) ID**.
+   - **`OIDC_CLIENT_SECRET`**: the secret *value* you copied in step 3 (not its "Secret ID").
+
+   Any other OpenID Connect provider works too (e.g. Keycloak): set its authority, client id and secret.
+
+### Database migration for part 2
+Part 2 adds tables (`Users`, `Subscriptions`, `ChannelSettings`, `SmtpSettings`, `FeedFetchErrors`,
+`NotificationDeliveries`, `DataProtectionKeys`). Create the migration once:
+```bash
+dotnet ef migrations add Part2UsersAndSettings -p src/SrNotification.Data -s src/SrNotification.Data -o Migrations
+```
+
+### Running part 2
+Everything in Docker (web app at http://localhost:8080):
+```bash
+docker compose up --build
+```
+
+Local development with hot reload:
+```bash
+docker compose up -d postgres
+dotnet run --project src/SrNotification.Api          # http://localhost:5080
+dotnet run --project src/SrNotification.RssReader
+cd src/web && npm install && npm run dev               # open http://localhost:5173
+```
+Vite forwards `/api`, `/auth` and the sign-in callbacks to the API, so the browser sees one origin.
+Commit `src/web/package-lock.json` after the first `npm install` so Docker builds are reproducible.
+
+After signing in as an admin, open **Admin → Email server** and set up SMTP. Until then, users can't
+switch to a different notification address (the confirmation email can't be sent).

@@ -42,6 +42,7 @@ public sealed class RssReaderWorker(
             var refresher = scope.ServiceProvider.GetRequiredService<FeedRefresher>();
 
             var summary = await refresher.RefreshDueFeedsAsync(stoppingToken);
+            await refresher.PurgeOldErrorsAsync(stoppingToken);
 
             if (summary.FeedsDue > 0)
             {

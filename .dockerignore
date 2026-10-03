@@ -6,3 +6,5 @@
 .git/
 tests/
 .env
+**/node_modules/
+**/dist/

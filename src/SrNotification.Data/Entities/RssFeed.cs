@@ -2,7 +2,8 @@ namespace SrNotification.Data.Entities;
 
 /// <summary>
 /// An RSS/Atom feed URL that the RSS reader polls.
-/// Rows are added by the Web UI (part 2); the reader only updates the fetch bookkeeping columns.
+/// Rows are created by the Web API when a user follows a URL nobody followed before, and are shared
+/// by every user who follows that URL. The reader only updates the fetch bookkeeping columns.
 /// </summary>
 public class RssFeed
 {
@@ -41,4 +42,6 @@ public class RssFeed
     public DateTimeOffset? LastModified { get; set; }
 
     public ICollection<RssItem> Items { get; set; } = [];
+
+    public ICollection<Subscription> Subscriptions { get; set; } = [];
 }

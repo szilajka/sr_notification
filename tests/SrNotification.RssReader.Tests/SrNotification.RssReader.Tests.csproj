@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SrNotification.RssReader\SrNotification.RssReader.csproj" />
+    <ProjectReference Include="..\..\src\SrNotification.Infrastructure\SrNotification.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

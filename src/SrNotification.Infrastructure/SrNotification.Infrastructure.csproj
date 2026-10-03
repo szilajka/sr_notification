@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Code shared by the RSS reader, the Web API and the notification sender:
+       feed download/parsing, the outbound-HTTP guard, email (SMTP) and Slack sending. -->
+
+  <ItemGroup>
+    <PackageReference Include="System.ServiceModel.Syndication" />
+    <PackageReference Include="MailKit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SrNotification.Data\SrNotification.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SrNotification.RssReader.Tests" />
+  </ItemGroup>
+
+</Project>

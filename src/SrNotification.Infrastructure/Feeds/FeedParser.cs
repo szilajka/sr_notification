@@ -5,7 +5,7 @@ using System.Text;
 using System.Xml;
 using SrNotification.Data;
 
-namespace SrNotification.RssReader.Feeds;
+namespace SrNotification.Infrastructure.Feeds;
 
 /// <summary>Turns an RSS 2.0 or Atom 1.0 document into a <see cref="ParsedFeed"/>.</summary>
 public static class FeedParser
