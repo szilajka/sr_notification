@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SrNotification.Data;
@@ -11,9 +12,11 @@ using SrNotification.Data;
 namespace SrNotification.Data.Migrations
 {
     [DbContext(typeof(SrNotificationDbContext))]
-    partial class SrNotificationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261003130710_AddNotificationSender")]
+    partial class AddNotificationSender
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

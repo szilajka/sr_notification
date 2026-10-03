@@ -1,0 +1,89 @@
+{
+  "text": "3 new items from 2 feeds",
+  "blocks": [
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "3 new items from 2 feeds"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Example News – World*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*<https://example.com/news/elections-2026|Polls close in national election as turnout hits record>*\nVoting ended at 8 pm with turnout above 70%, the highest in three decades. Results are expected overnight…"
+      }
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "example.com · Published <!date^1791028380^{date_short_pretty} at {time}|Oct 3, 2026 11:53 UTC>"
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*<https://example.com/news/storm-warning|Storm warning issued for the northern coast>*\nForecasters expect winds of up to 120 km/h from Sunday evening. Ferry services have been suspended…"
+      }
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "example.com · Published <!date^1791027600^{date_short_pretty} at {time}|Oct 3, 2026 11:40 UTC>"
+        }
+      ]
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Example Dev Blog*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*<https://example.com/blog/release-10-0-12|Release 10.0.12 is out: security and performance fixes>*\nThis release fixes two security issues and speeds up startup by 15%. Upgrading is recommended…"
+      }
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "example.com · Published <!date^1791025500^{date_short_pretty} at {time}|Oct 3, 2026 11:05 UTC>"
+        }
+      ]
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "<http://localhost:8080/feeds|Manage your notifications>"
+        }
+      ]
+    }
+  ]
+}

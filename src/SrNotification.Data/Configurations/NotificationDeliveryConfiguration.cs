@@ -17,7 +17,8 @@ internal sealed class NotificationDeliveryConfiguration : IEntityTypeConfigurati
 
         // Never notify the same user about the same item twice on one channel.
         builder.HasIndex(d => new { d.RssItemId, d.UserId, d.Channel }).IsUnique();
-        // The sender picks up pending rows; the admin log lists failed ones newest first.
+        // The sender picks up due pending rows; the admin log lists failed ones newest first.
+        builder.HasIndex(d => new { d.Status, d.NextAttemptAt });
         builder.HasIndex(d => new { d.Status, d.CreatedAt });
         builder.HasIndex(d => d.UserId);
 

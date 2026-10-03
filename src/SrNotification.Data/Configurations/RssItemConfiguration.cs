@@ -20,7 +20,11 @@ internal sealed class RssItemConfiguration : IEntityTypeConfiguration<RssItem>
         // How the reader recognises items it has already stored.
         builder.HasIndex(i => new { i.FeedId, i.ExternalId }).IsUnique();
 
-        // The notification sender will look for recently fetched items.
         builder.HasIndex(i => i.FetchedAt);
+
+        // The notification sender's work queue: only items it hasn't processed yet (stays small).
+        builder.HasIndex(i => i.Id)
+            .HasDatabaseName("IX_RssItems_NotFannedOut")
+            .HasFilter("\"FannedOutAt\" IS NULL");
     }
 }

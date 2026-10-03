@@ -5,6 +5,9 @@ public enum DeliveryStatus
     Pending = 0,
     Sent = 1,
     Failed = 2,
+
+    /// <summary>Not sent on purpose: the user or an admin switched the channel off before it went out.</summary>
+    Skipped = 3,
 }
 
 /// <summary>
@@ -33,6 +36,12 @@ public class NotificationDelivery
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? LastAttemptAt { get; set; }
+
+    /// <summary>
+    /// When the sender may pick the row up (again). Set to now on creation, pushed back by the retry
+    /// schedule after a failure, and briefly into the future while a sender works on the row.
+    /// </summary>
+    public DateTimeOffset NextAttemptAt { get; set; }
 
     public DateTimeOffset? SentAt { get; set; }
 }

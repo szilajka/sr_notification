@@ -51,5 +51,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  notification-sender:
+    build:
+      context: .
+      dockerfile: src/SrNotification.NotificationSender/Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__SrNotification: "Host=postgres;Port=5432;Database=sr_notification;Username=sr_notification"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - create a .env file next to docker-compose.yml (see .env.example)}"
+      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8080}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started # the API applies the database migrations
+    restart: unless-stopped
+
 volumes:
   pgdata:

@@ -33,4 +33,10 @@ public class RssItem
     /// The notification sender can skip these so a newly added feed doesn't flood users.
     /// </summary>
     public bool IsFromInitialFetch { get; set; }
+
+    /// <summary>
+    /// When the notification sender created this item's deliveries (or decided none were needed).
+    /// Null means the sender hasn't looked at the item yet.
+    /// </summary>
+    public DateTimeOffset? FannedOutAt { get; set; }
 }

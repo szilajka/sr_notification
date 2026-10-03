@@ -2,7 +2,7 @@
 
 export type NotificationChannel = 'Email' | 'Slack';
 export type SmtpSecurity = 'Auto' | 'None' | 'StartTls' | 'SslOnConnect';
-export type DeliveryStatus = 'Pending' | 'Sent' | 'Failed';
+export type DeliveryStatus = 'Pending' | 'Sent' | 'Failed' | 'Skipped';
 
 export interface Me {
   id: number;

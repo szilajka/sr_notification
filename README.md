@@ -39,9 +39,11 @@ src/
   SrNotification.RssReader/       Part 1: background worker that reads the RSS feeds
   SrNotification.Api/             Part 2: Web API; also serves the built React app
   web/                            Part 2: React frontend (Vite + TypeScript)
+  SrNotification.NotificationSender/  Part 3: background worker that sends email and Slack notifications
 tests/
-  SrNotification.RssReader.Tests/
-docker-compose.yml                PostgreSQL + the RSS reader + the API/web app
+  SrNotification.RssReader.Tests/ Unit tests for all parts
+docs/slack-examples/              Example Slack messages (see Part 3)
+docker-compose.yml                PostgreSQL + RSS reader + API/web app + notification sender
 ```
 
 ## Part 1: RSS reader
@@ -262,3 +264,80 @@ Commit `src/web/package-lock.json` after the first `npm install` so Docker build
 
 After signing in as an admin, open **Admin → Email server** and set up SMTP. Until then, users can't
 switch to a different notification address (the confirmation email can't be sent).
+
+## Part 3: Notification sender
+A .NET Worker Service that turns new feed items into email and Slack messages. Every `PollInterval`
+(default 30 s) it runs one cycle:
+
+```
+RssItems (new) --1. fan-out--> NotificationDeliveries (Pending) --2. send--> Sent / retry later / Failed / Skipped
+```
+
+**1. Fan-out** picks up items it hasn't seen (`RssItems.FannedOutAt` is null) and creates one `Pending`
+row per item, user and channel, only when:
+- the item isn't part of a newly added feed's backlog (`IsFromInitialFetch`);
+- the item was found after the user started following the feed (`Subscriptions.FollowingSince`);
+- the item is less than `FanOutMaxAge` old (default 1 day), so the first start, or a sender that was
+  down for days, doesn't send old news;
+- the user switched that channel on for that feed and has a confirmed email address / a Slack webhook;
+- the admin hasn't turned the channel off. Items found while a channel is off are never sent on it,
+  so turning it back on doesn't release a burst of old notifications.
+
+Each batch inserts the rows and sets `FannedOutAt` in one transaction, and (item, user, channel) is
+unique, so items are never lost or sent twice. A PostgreSQL advisory lock lets only one sender
+instance fan out at a time.
+
+**2. Send** claims due rows (`UPDATE … FOR UPDATE SKIP LOCKED`, so several instances can run) and
+sends **one message per user and channel per cycle** listing all their new items, grouped by feed,
+with each item's publish time. Before sending it checks again: if the user or an admin switched the
+channel off in the meantime, the rows become `Skipped`. One SMTP connection is reused for the cycle.
+
+- **Email**: HTML + plain text, linked titles, publish time (UTC), a short plain-text summary, a
+  "Manage your notifications" link and a `List-Unsubscribe` header.
+- **Slack**: one mrkdwn message to the user's incoming webhook. Publish times use Slack's date
+  formatting, so each reader sees their own time zone. Examples: `docs/slack-examples/`; post one
+  to your webhook to see it:
+  ```powershell
+  Invoke-RestMethod -Uri '<webhook url>' -Method Post -ContentType 'application/json; charset=utf-8' -InFile docs\slack-examples\mrkdwn.json
+  ```
+
+Text from feeds is untrusted: it is HTML-/Slack-escaped, only http(s) links are kept, and summaries
+are reduced to plain text.
+
+### Resilience (Polly) and error logging
+- **Quick retries** (Polly pipeline per channel): 2 retries with exponential backoff and jitter,
+  a 30 s timeout per attempt, and a circuit breaker that pauses a channel for a minute when most of
+  its sends fail (e.g. the SMTP server is down) instead of hammering it.
+- **Retries stored in the database**: if the quick retries fail, the row stays `Pending` with
+  `Attempts + 1` and `NextAttemptAt` pushed back by `RetryDelays` (1 min, 5 min, 30 min, 2 h). After the
+  last one it becomes `Failed`. This survives restarts and longer outages.
+- **Permanent errors fail at once**: a recipient the mail server rejects for good (5xx), an invalid
+  address, or Slack answering 400/403/404/410 (e.g. `no_service`, `channel_is_archived`).
+- Every failed attempt records `LastError`; `Failed` rows appear in the web app under
+  **Admin → Failed notifications**. Sent and skipped rows are deleted after 30 days, failed ones after 90.
+
+### Configuration (`appsettings.json`, section `NotificationSender`)
+| Key | Default | Meaning |
+|---|---|---|
+| `PollInterval` | `00:00:30` | How often a cycle runs |
+| `FanOutMaxAge` | `1.00:00:00` | Older items get no notifications |
+| `MaxItemsPerMessage` | `50` | More items end with "…and N more" |
+| `RetryDelays` | `1m, 5m, 30m, 2h` | Waits between stored retries; attempts = count + 1 |
+| `SentRetention` / `FailedRetention` | `30` / `90` days | Clean-up of old rows |
+| `PublicUrl` | from `PUBLIC_URL` | Base of the "Manage your notifications" link |
+
+The sender uses the same Data Protection keys (stored in the database) as the API, to decrypt the
+SMTP password and Slack webhooks.
+
+### Database migration for part 3
+```bash
+dotnet ef migrations add NotificationSender -p src/SrNotification.Data -s src/SrNotification.Data -o Migrations
+```
+
+### Running part 3
+`docker compose up --build` now also starts the `notification-sender` service. Locally:
+```bash
+dotnet run --project src/SrNotification.NotificationSender
+```
+To try it end to end: set up SMTP in **Admin → Email server**, follow a frequently updated feed with
+email and/or Slack switched on, and wait for its next new item (the feed's existing items are not sent).

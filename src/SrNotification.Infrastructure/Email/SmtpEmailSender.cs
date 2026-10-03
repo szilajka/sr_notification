@@ -5,7 +5,13 @@ using SrNotification.Data.Entities;
 
 namespace SrNotification.Infrastructure.Email;
 
-public sealed record EmailMessage(string To, string Subject, string TextBody, string? HtmlBody = null);
+/// <param name="Headers">Extra headers, e.g. List-Unsubscribe.</param>
+public sealed record EmailMessage(
+    string To,
+    string Subject,
+    string TextBody,
+    string? HtmlBody = null,
+    IReadOnlyDictionary<string, string>? Headers = null);
 
 /// <summary>Connection details for one send. Built from <see cref="SmtpSettings"/> with the decrypted password.</summary>
 public sealed record SmtpConnection(
@@ -20,7 +26,14 @@ public sealed record SmtpConnection(
 /// <summary>Sends email with MailKit (Microsoft recommends it over System.Net.Mail.SmtpClient).</summary>
 public sealed class SmtpEmailSender
 {
+    /// <summary>Sends one message over a connection of its own.</summary>
     public async Task SendAsync(SmtpConnection smtp, EmailMessage message, CancellationToken cancellationToken)
+    {
+        await using var session = new SmtpSession(smtp);
+        await session.SendAsync(message, cancellationToken);
+    }
+
+    internal static MimeMessage ToMime(SmtpConnection smtp, EmailMessage message)
     {
         var mime = new MimeMessage();
         mime.From.Add(new MailboxAddress(smtp.FromName ?? string.Empty, smtp.FromAddress));
@@ -28,19 +41,18 @@ public sealed class SmtpEmailSender
         mime.Subject = message.Subject;
         mime.Body = new BodyBuilder { TextBody = message.TextBody, HtmlBody = message.HtmlBody }.ToMessageBody();
 
-        using var client = new SmtpClient { Timeout = 30_000 };
-        await client.ConnectAsync(smtp.Host, smtp.Port, ToSocketOptions(smtp.Security), cancellationToken);
-
-        if (!string.IsNullOrEmpty(smtp.Username))
+        if (message.Headers is not null)
         {
-            await client.AuthenticateAsync(smtp.Username, smtp.Password ?? string.Empty, cancellationToken);
+            foreach (var (name, value) in message.Headers)
+            {
+                mime.Headers.Add(name, value);
+            }
         }
 
-        await client.SendAsync(mime, cancellationToken);
-        await client.DisconnectAsync(quit: true, cancellationToken);
+        return mime;
     }
 
-    private static SecureSocketOptions ToSocketOptions(SmtpSecurity security) => security switch
+    internal static SecureSocketOptions ToSocketOptions(SmtpSecurity security) => security switch
     {
         SmtpSecurity.None => SecureSocketOptions.None,
         SmtpSecurity.StartTls => SecureSocketOptions.StartTls,
